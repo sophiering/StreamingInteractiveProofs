@@ -1,5 +1,6 @@
 # let's go! :D
 import math
+import random
 
 input1 = [1,2,3,4] # input()
 input2 = [1,2,3,4] # input() 
@@ -8,7 +9,7 @@ def equality(input1, input2): #checkpoint
     l = len(input1)
     # for stream 1 and 2:
     # calculate lagragian interpolating polynomial
-    checkpoint = math.randint(0,l) 
+    checkpoint = random.uniform(0,l) 
     total1 = 0
     total2 = 0
     for i in range(0,l): 
@@ -26,4 +27,3 @@ def equality(input1, input2): #checkpoint
         print("False")
 
 
-    
