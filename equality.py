@@ -42,9 +42,18 @@ def isprime(q, k):
 
     return True
     
-# length of string
-N = 4    
+def pickprime(qmin):
+    q = random.randint(qmin, qmin + 100000000)
+    while not isprime(q):
+        q = random.randint(qmin, qmin + 100000000)
+    return q
 
+# length of string
+n = 4    
+# m >= n
+m = n + random.randint(0,60)
+# the number of rows in the matrix
+h = math.ceil(math.sqrt(n))
 
 
 def equality(input1, input2): #checkpoint
@@ -53,7 +62,7 @@ def equality(input1, input2): #checkpoint
     q = pickprime()
     # for stream 1 and 2:
     # calculate lagragian interpolating polynomial
-    checkpoint = random.uniform(0,N) 
+    checkpoint = random.uniform(0,n) 
     total1 = 0
     total2 = 0
     indice = -1
