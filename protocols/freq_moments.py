@@ -5,9 +5,23 @@ import math
 import random
 import galois as g
 from protocols.equality import pick_prime
+from stream_generation.gen_f_2 import frequencies, h_2d
 
 # larger k = more accuracy
 k = 45
+
+def f_2(filename, k):
+    # create frequency stream
+    n, s = frequencies(filename)
+    # generate sketch
+    q, r, h, v_sketch = create_sketch(filename, k)
+    # create helper annotation
+    h_2d(n, s, q)
+    # stream in helper annotation
+    h_annotation = helper(filename, q)
+    # verify
+    verify(v_sketch, h_annotation, g.GF(q), r, h)
+
 
 def create_sketch(filename, k):
     # input is the elements followed by the helper's annotation: a_1, ... a_n, s'(x)
@@ -38,29 +52,55 @@ def create_sketch(filename, k):
             s_a = item // h
             s_b = item % h
             sketch[s_b] += precompute[s_a] * current_value
+    return q, r, h, sketch
 
+def helper(filename, q):
+    F_q = g.GF(q)
+    with open(filename, 'r') as stream:
         h_annotation = []
         for h_val in stream:
             h_annotation.append(F_q(int(h_val.strip())))
+    return h_annotation
 
 # sumcheck
 def verify(sketch, h_annotation, F_q, r, h):
+    h_len = len(h_annotation)
     total1 = F_q(0)
     for s_val in sketch:
         total1 += s_val ** 2
     
     total2 = F_q(0)
-    for h_val in reversed(h_annotation):
-        total2 = (total2 * r) + h_val
+    # edge case (prevents divide by zero error later on)
+    exact_match = False
+    for i in range(h_len):
+        if r == F_q(i):
+            total2 = h_annotation[i]
+            exact_match = True
+            break
+    
+    if not exact_match:
+        l_r = F_q(1)
+        for i in range(h_len):
+            l_r *= (r-F_q(i))
+
+        barycentric_sum = F_q(0)
+        for i in range(h_len):
+            w_i_inv = F_q(1)
+            for j in range(h_len):
+                if i != j:
+                    w_i_inv *= (F_q(i) - F_q(j))
+            
+            w_i = F_q(1) / w_i_inv  
+            term = (h_annotation[i] * w_i) / (r - F_q(i))
+            barycentric_sum += term
+        total2 = l_r * barycentric_sum
 
     if total1 == total2:
         print("True")
-        # we want to calculate F_2 here
-        f2 = F_q(0)
-        for x_val in range(h):
-                field_x = F
-
-        return f2
+        f_2 = F_q(0)
+        for i in range(h):
+            f2 += h_annotation[i]
+        return f_2
     else:
         print("False")
         return -1
