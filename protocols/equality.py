@@ -13,22 +13,30 @@ k = 45
 
 # carries out the Miller-Rabin primality test
 def miller_rabin(d,s,q):
-    a = 2 + random.randint(1,q - 4)
+    a = random.randint(2,q - 2)
     x = pow(a,d,q)
-    for i in range(s):
-        y = pow(x,2,q)
-        if (y == 1) and (x!= 1) and (x != q):
-            return False
-        x = y
-    return True
+
+    if (x == 1) or (x == q - 1):
+        return True
+
+    for i in range(s - 1):
+        x = pow(x,2,q)
+        if x == q - 1:
+            return True
+    return False
 
 # determines if a number is prime
 def prime_check(q, k):
+    start_time = time.perf_counter()
     # edge cases
     if (q == 2) or (q == 3):
-        return True
+        end_time = time.perf_counter()
+        run_time = end_time - start_time
+        return (True, run_time)
     elif (q < 2) or (q % 2 == 0):
-        return False
+        end_time = time.perf_counter()
+        run_time = end_time - start_time
+        return (False, run_time)
     
     s = 0
     d = q - 1
@@ -38,72 +46,77 @@ def prime_check(q, k):
 
     for i in range(k):
         if (miller_rabin(d,s,q) == False):
-            return False
-    return True
+            end_time = time.perf_counter()
+            run_time = end_time - start_time
+            return (False, run_time)
+    end_time = time.perf_counter()
+    run_time = end_time - start_time
+    return (True, run_time)
     
 # generates random number q until q is prime
 def pick_prime(qmin, k):
-    q = random.randint(qmin, qmin + 100000000)
+    q = 2 * random.randint(qmin, qmin + 100000000) + 1
     while not prime_check(q, k):
-        q = random.randint(qmin, qmin + 100000000)
+        q = 2 * random.randint(qmin, qmin + 100000000) + 1
     return q
 
-
+def stream_generator(filepath):
+    with open(filepath, 'r') as stream:
+        for line in stream:
+            yield int(line.strip())
 
 # checkpoint to determine equality
 def equality_check(filename): 
     start_time = time.perf_counter()
+    stream = stream_generator(filename)
+    # length of the input without annotation
+    n = next(stream) 
+    # m >= n
+    m = n + random.randint(0,60)
+    # the number of rows in the matrix
+    h = math.ceil(math.sqrt(n))
+    # pick a prime from 1 to M 
+    qmin = max(pow(m, k), 3*k*h)
+    q = pick_prime(qmin, k)
+    print("q found")
+    # calculate lagragian interpolating polynomial at this point
+    checkpoint = random.randint(0,q-1) 
 
-    with open(filename, 'r') as input:
-        # length of string
-        n = int(input.readline().strip())
-        print(n)
-        # m >= n
-        m = n + random.randint(0,60)
-        # the number of rows in the matrix
-        h = math.ceil(math.sqrt(n))
-        # pick a prime from 1 to M 
-        qmin = max(pow(m, k), 3*k*h)
-        q = pick_prime(qmin, k)
-        # calculate lagragian interpolating polynomial at this point
-        checkpoint = random.randint(0,q-1) 
-
-        # fingerprint of stream 1
-        fp1 = 0
-        # fingerprint of stream 2
-        fp2 = 0
-        x_term = 1
-        # time - we could just use this start time metric !
-        t = 0
-        for i in range(n):
-            i1 = int(input.readline().strip()) 
-            fp1 = (fp1 + i1 * x_term) % q
+    # fingerprint of stream 1
+    fp1 = 0
+    # fingerprint of stream 2
+    fp2 = 0
+    x_term = 1
+    # time - we could just use this start time metric !
+    t = 0
+    for i in range(n):
+        i1 = next(stream)
+        fp1 = (fp1 + i1 * x_term) % q
+        x_term = (x_term * checkpoint) % q
+        # are we using this?
+        t += 1
+    x_term = 1
+    for i in range(n):
+        try:
+            i2 = next(stream)
+            fp2 = (fp2 + i2 * x_term) % q
             x_term = (x_term * checkpoint) % q
             # are we using this?
             t += 1
-        x_term = 1
-        for i in range(n):
-            try:
-                i2 = int(input.readline().strip()) 
-                fp2 = (fp2 + i2 * x_term) % q
-                x_term = (x_term * checkpoint) % q
-                # are we using this?
-                t += 1
-            except ValueError:
-                print("length of inputs aren't equal")
-                end_time = time.perf_counter()
-                # print runtime
-                print(end_time - start_time)
-                return False
-        # WE MUST MAKE SURE LENGTH > n IS ALSO REJECTED
-
-        if fp1 == fp2:
+        except ValueError:
+            print("length of inputs aren't equal")
             end_time = time.perf_counter()
-            #runtime
-            run_time = end_time - start_time
-            return (True, run_time)
-        else:
-            end_time = time.perf_counter()
-            #runtime
             run_time = end_time - start_time
             return (False, run_time)
+    # WE MUST MAKE SURE LENGTH > n IS ALSO REJECTED
+
+    if fp1 == fp2:
+        end_time = time.perf_counter()
+        #runtime
+        run_time = end_time - start_time
+        return (True, run_time)
+    else:
+        end_time = time.perf_counter()
+        #runtime
+        run_time = end_time - start_time
+        return (False, run_time)

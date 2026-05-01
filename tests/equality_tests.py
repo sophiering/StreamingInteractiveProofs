@@ -1,5 +1,11 @@
 # equality tests
 import unittest
+import sys
+from pathlib import Path
+
+root_path = Path(__file__).resolve().parent.parent
+sys.path.append(str(root_path))
+
 from protocols.equality import equality_check
 
 class TestClass(unittest.TestCase):
