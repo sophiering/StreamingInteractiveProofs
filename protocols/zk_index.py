@@ -1,4 +1,5 @@
 # ZK index
+# ZK multivariate index: extend to 3D (trivariate) vs 2D (bivariate)
 
 # input: the length of the stream a, the stream a, the index j
 # output: the jth element of a
@@ -6,7 +7,7 @@ import math
 import random
 import secrets
 import galois as g
-from protocols.non_zk_index import create_stream, verifier, compute_g, check_g, interpolate_p
+from protocols.index import create_stream, verifier, compute_g, check_g, interpolate_p
 
 # we start with a consisting of a_1 to a_n
 # we create the l(x,r) line 

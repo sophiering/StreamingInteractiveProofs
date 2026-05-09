@@ -2,6 +2,12 @@
 import math
 import random
 import time
+import secrets
+
+from pathlib import Path
+from stream_generation.gen_equality import true_eq, false_eq
+
+base_path = Path(__file__).resolve().parent.parent
 
 #input : an integer n, first string of length n, second string of length n
 #output : true or false
@@ -10,6 +16,14 @@ import time
 q = random.randint(10000,100000)
 # larger k = more accuracy
 k = 45
+
+def equality_t(filename):
+    filename = true_eq(filename)
+    return equality_check(filename)
+
+def equality_f(filename):
+    filename = false_eq(filename)
+    return equality_check(filename)
 
 # carries out the Miller-Rabin primality test
 def miller_rabin(d,s,q):
@@ -58,9 +72,11 @@ def pick_prime(qmin, k):
     q = 2 * random.randint(qmin, qmin + 100000000) + 1
     while not prime_check(q, k):
         q = 2 * random.randint(qmin, qmin + 100000000) + 1
+    #print("q found")
     return q
 
-def stream_generator(filepath):
+def stream_generator(filename):
+    filepath = base_path / "streams" / filename
     with open(filepath, 'r') as stream:
         for line in stream:
             yield int(line.strip())
@@ -78,9 +94,8 @@ def equality_check(filename):
     # pick a prime from 1 to M 
     qmin = max(pow(m, k), 3*k*h)
     q = pick_prime(qmin, k)
-    print("q found")
     # calculate lagragian interpolating polynomial at this point
-    checkpoint = random.randint(0,q-1) 
+    checkpoint = secrets.randbelow(q) 
 
     # fingerprint of stream 1
     fp1 = 0

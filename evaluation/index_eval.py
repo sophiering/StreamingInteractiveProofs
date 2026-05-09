@@ -7,8 +7,8 @@ root_path = Path(__file__).resolve().parent.parent
 sys.path.append(str(root_path))
 base_path = Path(__file__).resolve().parent.parent
 
-from protocols.equality import equality_check
-from stream_generation.gen_equality import true_eq, false_eq
+from protocols.index import index_t, index_f
+from stream_generation.gen_index import true_index, false_index
 
 def eval_eq(filename):
     filepath = base_path / "streams" / filename
@@ -39,4 +39,3 @@ def eval_eq(filename):
         eq_runtimes.append(np.mean(eq_times))
         neq_runtimes.append(np.mean(neq_times))
     return eq_correctness, eq_runtimes, neq_correctness, neq_runtimes
-

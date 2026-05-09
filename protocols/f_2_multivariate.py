@@ -1,8 +1,9 @@
-# frequency moments: F_2
+# multivariate frequency moments: F_2
 # input: length of stream a, the stream a, the helper's annotation
 # output: the frequency moment 
 import math
 import random
+import numpy as np
 import galois as g
 import secrets
 import sys
@@ -14,32 +15,15 @@ base_path = Path(__file__).resolve().parent.parent
 
 
 from protocols.equality import pick_prime, stream_generator
-from stream_generation.gen_freq_moments import f_s, f_2_s, f_2_h_2d_t, f_2_h_2d_f
+from stream_generation.gen_freq_moments import f_1_s, f_2_s, f_2_h_2d_t, f_2_h_2d_f
 
 # larger k = more accuracy
 k = 45
 
-# 0th frequency moment
-def f_0(filename):
-    # prover creates stream
-    f_s(filename)
-    # verifier counts items
-    f_0 = f_0_v(filename)
-    return f_0
-
-def f_0_v(filename):
-    f_0 = 0
-    filepath = base_path / "streams" / filename
-    stream = stream_generator(filepath)
-    with open(filepath, 'r') as stream:
-        for item in stream:
-            f_0 += 1
-    return f_0
-
 # 1st frequency moment
 def f_1(filename):
     # prover creates stream
-    f_s(filename)
+    f_1_s(filename)
     # verifier counts items
     f_1 = f_1_v(filename)
     return f_1
@@ -47,22 +31,21 @@ def f_1(filename):
 def f_1_v(filename):
     f_1 = 0
     filepath = base_path / "streams" / filename
-    stream = stream_generator(filepath)
-    with open(filepath, "r") as stream:
+    with open(filepath, 'r') as stream:
         for item in stream:
-            f_1 += int(item)
+            f_1 += 1
     return f_1
 
 # 2nd frequency moment with correct helper annotation (should correctly calculate F_2)
-def f_2_t(filename, helpername, k):
+def f_2_t(filename, helpername, k, dim):
     # create frequency stream
     n, s = f_2_s(filename)
     # generate sketch
-    q, r, h, v_sketch = create_sketch(filename, k)
+    q, r, h, v_sketch = create_sketch(filename, k, dim)
     # create helper annotation
-    f_2_h_2d_t(helpername, n, s, q)
+    f_2_h_2d_t(helpername, n, s, q, dim)
     # verify
-    f_2 = verify(v_sketch, helpername, g.GF(q), r, h)
+    f_2 = verify(v_sketch, helpername, g.GF(q), r, h, dim)
     return f_2
 
 
@@ -78,14 +61,15 @@ def f_2_f(filename, helpername, k):
     f_2 = verify(v_sketch, helpername, g.GF(q), q, r, h)
     return f_2
 
-def create_sketch(filename, k):
+def create_sketch(filename, k, dim):
     filepath = base_path / "streams" / filename
     # input is the elements followed by the helper's annotation: a_1, ... a_n, s'(x)
     stream = stream_generator(filepath)
     # length of the input without annotation
     n = next(stream) 
     m = n + random.randint(1,100000)
-    h = math.ceil(math.sqrt(n))
+    h = math.ceil(math.pow(n, 1/dim))
+    shape = [h] * dim
     qmin = max(math.pow(m,k), 3*k*h)
     q = pick_prime(qmin, k)
     q_chosen = False
@@ -96,31 +80,29 @@ def create_sketch(filename, k):
             q_chosen = True
         except ValueError:
             q = pick_prime(qmin, k)
-    r = F_q(secrets.randbelow(q))
-    # precompute stage
-    # precompute rows
-    numerator_rows = F_q(1)
-    for i in range(h):
-        numerator_rows *= (r[0] - F_q(i))
-    precomp_rows = F_q.Ones(h)
-    for a in range(h):
-        denominator_rows = math.factorial(a) * ((-1) ** (h-1-a)) * math.factorial(h-1-a)
-        denominator_rows = F_q(denominator_rows % q)
-        precomp_rows[a] = numerator_rows / ((r[0] - F_q(a)) * denominator_rows)
-    # piece together sketch
-    sketch = F_q.Zeros(h)       
+    r = [F_q(secrets.randbelow(q))] * dim
+    # precompute 
+    precomp = np.ones((dim,h))
+    for dimension in dim:
+        for a in range(h):
+            for i in range(h):
+                if i != a:
+                    precomp[dimension][a] *= (r[dimension] - F_q(i)) / (F_q(a) - F_q(i))      
+    # create the h x v matrix
+    sketch = F_q.Zeros(h)    
     for item in range(n):
+        # map to 3D coordinates (s_a, s_b, s_c)
         value = next(stream)
         current_value = F_q(value)
-        # map to 2D coordinates (s_a, s_b)
-        s_a = item // h
-        s_b = item % h
-        # build f(r,i) values for i in [1,n]
-        sketch[s_b] += precomp_rows[s_a] * current_value
+        k_dim_v = np.unravel_index(item, shape)
+        total = 1
+        for dimension in range(dim):
+            total *= precomp[dimension][k_dim_v[dimension]]
+        sketch[k_dim_v[-1]] += current_value * total
     return q, r, h, sketch
 
 # sumcheck
-def verify(sketch, h_annotation, F_q, r, h):
+def verify(sketch, h_annotation, F_q, r, h, dim):
     filepath = base_path / "streams" / h_annotation
     # input is the elements followed by the helper's annotation: a_1, ... a_n, s'(x)
     stream = stream_generator(filepath)
@@ -160,4 +142,3 @@ def verify(sketch, h_annotation, F_q, r, h):
     else:
         print("False")
         return -1
-
