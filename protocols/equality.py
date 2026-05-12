@@ -1,13 +1,16 @@
 # let's go! :D
 import math
 import random
-import time
 import secrets
-
+import sys
 from pathlib import Path
+
+root_path = Path(__file__).resolve().parent.parent
+sys.path.append(str(root_path))
+base_path = Path(__file__).resolve().parent.parent
+
 from stream_generation.gen_equality import true_eq, false_eq
 
-base_path = Path(__file__).resolve().parent.parent
 
 #input : an integer n, first string of length n, second string of length n
 #output : true or false
@@ -41,16 +44,11 @@ def miller_rabin(d,s,q):
 
 # determines if a number is prime
 def prime_check(q, k):
-    start_time = time.perf_counter()
     # edge cases
     if (q == 2) or (q == 3):
-        end_time = time.perf_counter()
-        run_time = end_time - start_time
-        return (True, run_time)
+        return True
     elif (q < 2) or (q % 2 == 0):
-        end_time = time.perf_counter()
-        run_time = end_time - start_time
-        return (False, run_time)
+        return False
     
     s = 0
     d = q - 1
@@ -60,15 +58,12 @@ def prime_check(q, k):
 
     for i in range(k):
         if (miller_rabin(d,s,q) == False):
-            end_time = time.perf_counter()
-            run_time = end_time - start_time
-            return (False, run_time)
-    end_time = time.perf_counter()
-    run_time = end_time - start_time
-    return (True, run_time)
+            return False
+    return True
     
 # generates random number q until q is prime
 def pick_prime(qmin, k):
+    qmin = int(qmin)
     q = 2 * random.randint(qmin, qmin + 100000000) + 1
     while not prime_check(q, k):
         q = 2 * random.randint(qmin, qmin + 100000000) + 1
@@ -83,7 +78,6 @@ def stream_generator(filename):
 
 # checkpoint to determine equality
 def equality_check(filename): 
-    start_time = time.perf_counter()
     stream = stream_generator(filename)
     # length of the input without annotation
     n = next(stream) 
@@ -120,18 +114,50 @@ def equality_check(filename):
             t += 1
         except ValueError:
             print("length of inputs aren't equal")
-            end_time = time.perf_counter()
-            run_time = end_time - start_time
-            return (False, run_time)
+            return False
     # WE MUST MAKE SURE LENGTH > n IS ALSO REJECTED
 
     if fp1 == fp2:
-        end_time = time.perf_counter()
-        #runtime
-        run_time = end_time - start_time
-        return (True, run_time)
+        return True
     else:
-        end_time = time.perf_counter()
-        #runtime
-        run_time = end_time - start_time
-        return (False, run_time)
+        return False
+    
+def eq_fixed_q(filename): 
+    stream = stream_generator(filename)
+    # length of the input without annotation
+    n = next(stream) 
+    # fixed q chosen
+    q = 2305843009213693951
+    # calculate lagragian interpolating polynomial at this point
+    checkpoint = secrets.randbelow(q) 
+
+    # fingerprint of stream 1
+    fp1 = 0
+    # fingerprint of stream 2
+    fp2 = 0
+    x_term = 1
+    # time - we could just use this start time metric !
+    t = 0
+    for i in range(n):
+        i1 = next(stream)
+        fp1 = (fp1 + i1 * x_term) % q
+        x_term = (x_term * checkpoint) % q
+        # are we using this?
+        t += 1
+    x_term = 1
+    for i in range(n):
+        try:
+            i2 = next(stream)
+            fp2 = (fp2 + i2 * x_term) % q
+            x_term = (x_term * checkpoint) % q
+            # are we using this?
+            t += 1
+        except ValueError:
+            print("length of inputs aren't equal")
+            return False
+    # WE MUST MAKE SURE LENGTH > n IS ALSO REJECTED
+
+    if fp1 == fp2:
+        return True
+    else:
+        return False

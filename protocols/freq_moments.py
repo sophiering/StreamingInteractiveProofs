@@ -2,7 +2,8 @@
 # input: length of stream a, the stream a, the helper's annotation
 # output: the frequency moment 
 import math
-import random
+import time
+import numpy as np
 import galois as g
 import secrets
 import sys
@@ -12,9 +13,8 @@ root_path = Path(__file__).resolve().parent.parent
 sys.path.append(str(root_path))
 base_path = Path(__file__).resolve().parent.parent
 
-
 from protocols.equality import pick_prime, stream_generator
-from stream_generation.gen_freq_moments import f_s, f_2_s, f_2_h_2d_t, f_2_h_2d_f
+from stream_generation.gen_freq_moments import f_s, f_2_s
 
 # larger k = more accuracy
 k = 45
@@ -54,38 +54,48 @@ def f_1_v(filename):
     return f_1
 
 # 2nd frequency moment with correct helper annotation (should correctly calculate F_2)
-def f_2_t(filename, helpername, k):
+def f_2_t(filename, helpername):
+    print(time.perf_counter())
     # create frequency stream
     n, s = f_2_s(filename)
+    print(time.perf_counter())
     # generate sketch
-    q, r, h, v_sketch = create_sketch(filename, k)
+    q, r, h, v_sketch = sketch_2d(filename, k)
+    print(time.perf_counter())
     # create helper annotation
-    f_2_h_2d_t(helpername, n, s, q)
+    h_2d_t(helpername, n, s, q)
+    print(time.perf_counter())
     # verify
     f_2 = verify(v_sketch, helpername, g.GF(q), r, h)
+    print(time.perf_counter())
     return f_2
 
 
 # 2nd frequency moment with bad helper annotation (should fail)
-def f_2_f(filename, helpername, k):
+def f_2_f(filename, helpername):
+    print(time.perf_counter())
     # create frequency stream
     n, s = f_2_s(filename)
+    print(time.perf_counter())
     # generate sketch
-    q, r, h, v_sketch = create_sketch(filename, k)
+    q, r, h, v_sketch = sketch_2d(filename, k)
+    print(time.perf_counter())
     # create bad helper annotation
-    f_2_h_2d_f(helpername, n, s, q) 
+    h_2d_f(helpername, n, s, q) 
+    print(time.perf_counter())
     # verify should return -1
-    f_2 = verify(v_sketch, helpername, g.GF(q), q, r, h)
+    f_2 = verify(v_sketch, helpername, g.GF(q), r, h)
+    print(time.perf_counter())
     return f_2
 
-def create_sketch(filename, k):
+def sketch_2d(filename, k):
     filepath = base_path / "streams" / filename
     # input is the elements followed by the helper's annotation: a_1, ... a_n, s'(x)
     stream = stream_generator(filepath)
     # length of the input without annotation
     n = next(stream) 
-    m = n + random.randint(1,100000)
     h = math.ceil(math.sqrt(n))
+    '''m = n + random.randint(1,100000)
     qmin = max(math.pow(m,k), 3*k*h)
     q = pick_prime(qmin, k)
     q_chosen = False
@@ -95,18 +105,20 @@ def create_sketch(filename, k):
             F_q = g.GF(q)
             q_chosen = True
         except ValueError:
-            q = pick_prime(qmin, k)
+            q = pick_prime(qmin, k) '''
+    q = 2147483647
+    F_q = g.GF(q)
     r = F_q(secrets.randbelow(q))
     # precompute stage
     # precompute rows
     numerator_rows = F_q(1)
     for i in range(h):
-        numerator_rows *= (r[0] - F_q(i))
+        numerator_rows *= (r - F_q(i))
     precomp_rows = F_q.Ones(h)
     for a in range(h):
         denominator_rows = math.factorial(a) * ((-1) ** (h-1-a)) * math.factorial(h-1-a)
         denominator_rows = F_q(denominator_rows % q)
-        precomp_rows[a] = numerator_rows / ((r[0] - F_q(a)) * denominator_rows)
+        precomp_rows[a] = numerator_rows / ((r - F_q(a)) * denominator_rows)
     # piece together sketch
     sketch = F_q.Zeros(h)       
     for item in range(n):
@@ -118,6 +130,86 @@ def create_sketch(filename, k):
         # build f(r,i) values for i in [1,n]
         sketch[s_b] += precomp_rows[s_a] * current_value
     return q, r, h, sketch
+
+# honest prover
+def h_2d_t(helpername, n, s, q):
+    filepath = base_path / "streams" / helpername
+    F_q = g.GF(q)
+    h = math.ceil(math.sqrt(n))
+    d = (2 * h) - 1
+    # precompute weights 
+    precompute = F_q.Zeros((d,h), dtype=np.int64)
+    denominators = F_q.Ones(h)
+    for a in range(h):
+        for i in range(h):
+            if i != a:
+                denominators[a] *= (F_q(a) - F_q(i))
+    for X in range(d):
+        X_fq = F_q(X)
+        if 0 <= X < h:
+            precompute[X,X] = F_q(1)
+        else:
+            common_num = F_q(1)
+            for i in range(h):
+                common_num *= (X_fq - F_q(i))
+            for a in range(h):
+                precompute[X,a] = common_num / ((X_fq - F_q(a)) * denominators[a])
+    # use precomputed weights to compute f over columns (y)
+    s_padded = np.zeros(h*h, dtype=np.int64)
+    s_len = min(n, len(s))
+    s_padded[:s_len] = s[:s_len]
+    grid = F_q(s_padded).reshape((h,h))
+    # computes all elements at once vs element by element
+    f_tilde = np.matmul(precompute, grid)
+    # turn h x h matrix into 1 x h array
+    s_prime = np.sum(f_tilde ** 2, axis=1)
+    with open(filepath, "w") as f:
+        for element in s_prime:
+            f.write(f"{int(element)}\n")
+    return s_prime
+
+# dishonest prover
+def h_2d_f(helpername, n, s, q):
+    filepath = base_path / "streams" / helpername
+    F_q = g.GF(q)
+    h = math.ceil(math.sqrt(n))
+    d = (2 * h) - 1
+    # precompute weights 
+    precompute = F_q.Zeros((d,h))
+    denominators = F_q.Ones(h)
+    for a in range(h):
+        for i in range(h):
+            if i != a:
+                denominators[a] *= (F_q(a) - F_q(i))
+    for X in range(d):
+        X_fq = F_q(X)
+        if 0 <= X < h:
+            precompute[X,X] = F_q(1)
+        else:
+            common_num = F_q(1)
+            for i in range(h):
+                common_num *= (X_fq - F_q(i))
+            for a in range(h):
+                precompute[X,a] = common_num / ((X_fq - F_q(a)) * denominators[a])
+    # use precomputed weights to compute f over columns (y)
+    s_padded = np.zeros(h*h, dtype=np.int64)
+    s_len = min(n, len(s))
+    for x in s[:s_len]:
+        s_padded[:s_len] = int(x) 
+    grid = F_q(s_padded).reshape((h,h))
+    # computes all elements at once vs element by element
+    f_tilde = np.matmul(precompute, grid)
+    # turn h x h matrix into 1 x h array
+    s_prime = np.sum(f_tilde ** 2, axis=1)
+    # alter s'(X) to simulate malicious helper annotation
+    s_prime[0] += F_q(1)
+    with open(filepath, "w") as f:
+        for element in s_prime:
+            f.write(f"{int(element)}\n")
+    return s_prime
+
+def multivariate_h():
+    pass
 
 # sumcheck
 def verify(sketch, h_annotation, F_q, r, h):
@@ -155,9 +247,8 @@ def verify(sketch, h_annotation, F_q, r, h):
                 total2 += s_val * l_x_r
     # complete check to see if helper annotation can be trusted: s'(r) = s(r)
     if total1 == total2:
-        print("True")
         return int(f_2)
     else:
-        print("False")
-        return -1
+        return False
+
 

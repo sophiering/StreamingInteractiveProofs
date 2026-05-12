@@ -3,15 +3,54 @@
 
 # input: the length of the stream a, the stream a, the index j
 # output: the jth element of a
-import math
-import random
+import numpy as np
 import secrets
 import galois as g
-from protocols.index import create_stream, verifier, compute_g, check_g, interpolate_p
+from index import verifier, compute_g, check_g, interpolate_p
+
+import sys
+from pathlib import Path
+
+root_path = Path(__file__).resolve().parent.parent
+sys.path.append(str(root_path))
+base_path = Path(__file__).resolve().parent.parent
+
+from stream_generation.gen_index import gen_index
 
 # we start with a consisting of a_1 to a_n
 # we create the l(x,r) line 
 # for non zk we would just send f evaluated at all the points f_{a_1}, ... f_{a_n} 
+
+def zk_index_h(filename):
+    # create the stream
+    a = gen_index(filename)
+    #verifer creates its sketch
+    F_q, mu, r, sketch, n, h, a_j = verifier(filename)
+    # prover calculates the g vals
+    g = compute_g(a, a_j, mu, r, n, h, F_q)
+    #verifier interpolates the values provided by the prover, checks it agrees with prover and returns a_j if so
+    return check_g_zk(sketch, g, mu, F_q)
+
+def zk_index_d_verifier(filename):
+    # create the stream
+    a = gen_index(filename)
+    #verifer creates its sketch
+    F_q, mu, r, sketch, n, h, a_j = verifier(filename)
+    # prover calculates the g vals
+    g = compute_g(a, a_j, mu, r, n, h, F_q)
+    #verifier interpolates the values provided by the prover, checks it agrees with prover and returns a_j if so
+    return check_g_zk(sketch, g, mu, F_q)
+
+def zk_index_d_prover(filename):
+    # create the stream
+    a = gen_index(filename)
+    #verifer creates its sketch
+    F_q, mu, r, sketch, n, h, a_j = verifier(filename)
+    # prover calculates the g vals
+    g = compute_g(a, a_j, mu, r, n, h, F_q)
+    g = np.random.permutation(g)
+    #verifier interpolates the values provided by the prover, checks it agrees with prover and returns a_j if so
+    return check_g_zk(sketch, g, mu, F_q)
 
 def pad_value(value, F_q):
     pad_left = F_q(secrets.randbelow(F_q.order))
@@ -38,24 +77,6 @@ def check_g_zk(sketch, zk_vals, mu, F_q):
         print(False)
         return False
     
-# prover 
-def non_zk_index_protocol(input1, a, j):
-    # create the stream
-    create_stream(input1, a, j)
-
-    #verifer creates its sketch
-    F_q, mu, r, sketch, n, h, a_j = verifier(input1)
-
-    # prover calculates the g vals
-    g_vals = compute_g(a, a_j, mu, r, n, h, F_q)
-
-    zk_vals = []
-    for i in g_vals:
-        padded = pad_value(i, F_q)
-        zk_vals.append(padded)
-
-    #verifier interpolates the values provided by the prover, checks it agrees with prover and returns a_j if so
-    return check_g_zk(sketch, zk_vals, mu, F_q)
 
 
 

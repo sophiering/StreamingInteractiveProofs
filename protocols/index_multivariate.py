@@ -94,48 +94,55 @@ def verifier(filename, dim):
     # check with prover
     return (F_q, mu, r, sketch, n, h, a_j)
 
-# compute g
+# prover: compute g
 def line_vals(a_j, t, mu, r, dim):
     l = np.zeros(dim)
     for dimension in dim:
         l[dimension] = a_j[dimension] + (t / mu) * (r[dimension] - a_j[dimension])
     return l
 
-# compute g
-def compute_basis(h, F_q, target):
-    # edge case
-    for i in range(h):
-        if target == F_q(i):
-            basis = [F_q(0)] * h
-            basis[i] = F_q(1)
-            return basis
-    # majority case
-    numerator = F_q(1)
-    for i in range(h):
-        numerator *= (target - F_q(i))
-    basis = [F_q(0)] * h
+# prover: compute g 
+def precomp_denominators(h, F_q):
+    denominators = [F_q(0)] * h
     q = F_q.order
     for j in range(h):
         denominator = math.factorial(j) * ((-1) ** (h-1-j)) * math.factorial(h-1-j)
-        F_q_denominator = F_q(denominator % q)
-        basis[j] = numerator / ((target - F_q(j)) * F_q_denominator)
+        denominators[j] = F_q(denominator % q)
+    d_arr = F_q(denominators)
+    # removes the repeated finite field division later on
+    d_inv = F_q(1) / d_arr
+    grid = F_q(np.arange(h))
+    return d_inv, grid
+
+# prover: compute g
+def compute_basis(h, F_q, target, d_inv, grid):
+    target_int = int(target)
+    # edge case
+    if target_int < h:
+        basis = F_q.Zeros(h)
+        basis[target_int] = F_q(1)
+        return basis
+    # majority case
+    diffs = target - grid
+    numerator = np.prod(diffs)
+    basis = numerator * d_inv / diffs
     return basis
 
 # prover
 def compute_g(a, a_j, mu, r, n, h, F_q, dim):
-    degree = 2 * h - 2
+    degree = dim * (h - 1)
     g_vals = []
     padded_a = list(a) + [0] * ((h*h) - n)
-    matrix = [padded_a[i:i + h] for i in range(0, h*h, h)]
-    F_q_matrix = F_q(matrix)
     for t in range(degree + 1):
         t_f = F_q(t)
-        x, y = line_vals(a_j, t_f, mu, r, dim)
-        row_basis = F_q(compute_basis(h, F_q, x))
-        col_basis = F_q(compute_basis(h, F_q, y))
-        #compute P(x,y)
+        l = line_vals(a_j, t_f, mu, r, dim)
+        bases = []
+        for d in range(dim):
+            bases.append(compute_basis(h, F_q, l[d]))
+        # compute P(x,y)
+        for i in range
         t_val = F_q(0)
-        t_val = row_basis @ F_q_matrix @ col_basis
+        t_val = d_basis @ F_q_matrix 
         g_vals.append(t_val)
     # return : coefficients polynomial g, where g(0) = x_j and g(mu) = r
     return g_vals
