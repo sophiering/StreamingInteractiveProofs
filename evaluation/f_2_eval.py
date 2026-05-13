@@ -29,12 +29,12 @@ def eval_f_2(filename, helpername, n_vals):
         honest_times = []
         dishonest_times = []
         # honest prover tests
-        for i in range(1):
+        for i in range(10):
             v, t = f_2_t_eval(filename, helpername, n)
             honest_verdicts.append(v)
             honest_times.append(t)
         # dishonest prover tests
-        for i in range(1):
+        for i in range(10):
             v, t = f_2_f_eval(filename, helpername, n)
             dishonest_verdicts.append(v)
             dishonest_times.append(t)

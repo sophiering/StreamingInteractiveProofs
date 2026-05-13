@@ -31,6 +31,18 @@ def gen_pep(filename):
         f.write(f"{alpha}\n")
     return a
 
+def gen_zk_index(filename):
+    filepath = base_path / "streams" / filename
+    n = random.randint(1, 100)
+    a = np.random.randint(0, 1000, size = n)
+    j = random.randint(1, n)
+    with open(filepath, "w") as f:
+        f.write(f"{n}\n")
+        for element in a:
+            f.write(f"{int(element)}\n")
+        f.write(f"{j}\n")
+    return a
+
 def index_test(filename):
     filepath = base_path / "streams" / filename
     n = random.randint(1, 1000000)

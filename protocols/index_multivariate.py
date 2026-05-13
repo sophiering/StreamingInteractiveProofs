@@ -3,12 +3,12 @@
 # input: the length of the stream a, the stream a, the index j
 # output: the jth element of a
 import math
-import random
 import secrets
 import numpy as np
 import galois as g
 import sys
 from pathlib import Path
+from functools import reduce
 
 root_path = Path(__file__).resolve().parent.parent
 sys.path.append(str(root_path))
@@ -17,65 +17,56 @@ base_path = Path(__file__).resolve().parent.parent
 from protocols.equality import pick_prime, stream_generator
 from stream_generation.gen_index import gen_index
 
-# for bivariate:
-# a_j = tuple x_j (a,b)
-# r = tuple r (c,d)
-
 # works!
 def index_t(filename, dim):
     # create the stream
     a = gen_index(filename)
     #verifer creates its sketch
-    F_q, mu, r, sketch, n, h, a_j = verifier(filename, dim)
+    F_q, mu, r, sketch, n, h, a_j = m_verifier(filename, dim)
     # prover calculates the g vals
-    g = compute_g(a, a_j, mu, r, n, h, F_q, dim)
+    g = m_compute_g(a, a_j, mu, r, n, h, F_q, dim)
     #verifier interpolates the values provided by the prover, checks it agrees with prover and returns a_j if so
-    return check_g(sketch, g, mu, F_q, dim)
+    return m_check_g(sketch, g, mu, F_q)
 
-def index_f(filename):
+def index_f(filename, dim):
     # create the stream
     a = gen_index(filename)
     #verifer creates its sketch
-    F_q, mu, r, sketch, n, h, a_j = verifier(filename)
-    # prover calculates the g vals
-    g = compute_g(a, a_j, mu, r, n, h, F_q)
+    F_q, mu, r, sketch, n, h, a_j = m_verifier(filename, dim)
+    # prover calculates the INCORRECT g vals
+    g = m_compute_g(a, a_j, mu, r, n, h, F_q, dim)
     g = np.random.permutation(g)
+    g[0] += 1
     #verifier interpolates the values provided by the prover, checks it agrees with prover and returns a_j if so
-    return check_g(sketch, g, mu, F_q)
+    return m_check_g(sketch, g, mu, F_q)
 
 # verifier
-def verifier(filename, dim):
+def m_verifier(filename, dim):
     # input is the length of stream a, the stream a and the index j
     stream = stream_generator(filename)
-    # larger k = more accuracy
-    k = 45
     # n: length of the input without annotation
     n = next(stream)
     h = math.ceil(math.pow(n, 1/dim))
     shape = [h] * dim
-    # m = n + random.randint(1,100000)
-    # qmin = max(pow(m, k), 3*k*h)
-    # q = pick_prime(qmin,k)
-    q = 2305843009213693951
+    q = 2147483647
     # F_q: field for the low degree extension
     F_q = g.GF(q)
     # mu: non-zero element of F_q
-    mu = F_q(random.randint(1,q-1))
+    mu = F_q(secrets.randbelow(q-2)+1)
     # r: random point r (r_i,r_j) that the line will pass through alongside j
-    r = [F_q(secrets.randbelow(q))] * dim
+    r = F_q([secrets.randbelow(q) for _ in range(dim)])
     # precompute stage
-    numerators = np.zeros(dim)
-    denominators = np.zeros(dim)
-    precomp = np.ones((dim,h))
-    for dimension in dim:
+    numerators = F_q.Zeros(dim)
+    denominators = F_q.Zeros(dim)
+    precomp = F_q.Ones((dim,h))
+    for dimension in range(dim):
         numerators[dimension] = F_q(1)
         for i in range(h):
-            numerators[dimension] *= (r[dimension] - F_q(i))
-        precomp[dim] = F_q.Ones(h)
+            numerators[dimension] *= r[dimension] - F_q(i)
+        precomp[dimension] = F_q.Ones(h)
         for a in range(h):
-            denominators[dimension] = math.factorial(a) * ((-1) ** (h-1-a)) * math.factorial(h-1-a)
-            denominators[dimension] = F_q(denominators[dimension] % q)
-            precomp[a] = numerators[dimension] / ((r[dimension] - F_q(a)) * denominators[dimension])
+            denominators[dimension] = (math.factorial(a) * ((-1) ** (h-1-a)) * math.factorial(h-1-a)) % q
+            precomp[dimension][a] = numerators[dimension] / ((r[dimension] - F_q(a)) * denominators[dimension])
     # create sketch for r
     sketch = F_q(0)
     for i in range(n):
@@ -83,7 +74,7 @@ def verifier(filename, dim):
         a_i = next(stream)
         s = np.unravel_index(i,shape)
         total = 1
-        for dimension in dim:
+        for dimension in range(dim):
             total *= precomp[dimension][s[dimension]] 
         sketch += a_i * total
     # index of 
@@ -95,10 +86,11 @@ def verifier(filename, dim):
     return (F_q, mu, r, sketch, n, h, a_j)
 
 # prover: compute g
-def line_vals(a_j, t, mu, r, dim):
-    l = np.zeros(dim)
-    for dimension in dim:
-        l[dimension] = a_j[dimension] + (t / mu) * (r[dimension] - a_j[dimension])
+def line_vals(a_j, t, mu, r, F_q, dim):
+    l = F_q.Zeros(dim)
+    for dimension in range(dim):
+        F_q_a_j = F_q(a_j[dimension])
+        l[dimension] = F_q_a_j + (t / mu) * (r[dimension] - F_q_a_j)
     return l
 
 # prover: compute g 
@@ -129,24 +121,31 @@ def compute_basis(h, F_q, target, d_inv, grid):
     return basis
 
 # prover
-def compute_g(a, a_j, mu, r, n, h, F_q, dim):
+def m_compute_g(a, a_j, mu, r, n, h, F_q, dim):
+    d_inv, grid = precomp_denominators(h, F_q)
     degree = dim * (h - 1)
     g_vals = []
-    padded_a = list(a) + [0] * ((h*h) - n)
+    F_a = F_q(a)
+    # do we need to make a F_q(a)? 
     for t in range(degree + 1):
         t_f = F_q(t)
-        l = line_vals(a_j, t_f, mu, r, dim)
+        l = line_vals(a_j, t_f, mu, r, F_q, dim)
         bases = []
+        # precompute basis weights
         for d in range(dim):
-            bases.append(compute_basis(h, F_q, l[d]))
+            bases.append(compute_basis(h, F_q, l[d], d_inv, grid))
+        weight = bases[0]
+        # outer product for multivariate basis weights (lagrange polynomial value at t)
+        for b in bases[1:]:
+            weight = np.outer(weight,b)
         # compute P(x,y)
-        for i in range
         t_val = F_q(0)
-        t_val = d_basis @ F_q_matrix 
+        current_weight = weight.flatten()[:n]
+        t_val = F_a @ current_weight
         g_vals.append(t_val)
     # return : coefficients polynomial g, where g(0) = x_j and g(mu) = r
     return g_vals
-   
+
 # check g 
 def interpolate_p(g, target, F_q):
     target = F_q(target)
@@ -169,7 +168,7 @@ def interpolate_p(g, target, F_q):
     return result
 
 # verifier 
-def check_g(sketch, g, mu, F_q):
+def m_check_g(sketch, g, mu, F_q):
     g_mu = interpolate_p(g, mu, F_q)
     # if initial sketch for r == g(mu) 
     if g_mu == sketch:
@@ -181,3 +180,6 @@ def check_g(sketch, g, mu, F_q):
     else:
         print(False)
         return False
+    
+
+    

@@ -1,5 +1,5 @@
-# ZK index
-# ZK multivariate index: extend to 3D (trivariate) vs 2D (bivariate)
+# naive ZK index : assumes honest verifier
+# multivariate 
 
 # input: the length of the stream a, the stream a, the index j
 # output: the jth element of a
@@ -24,102 +24,42 @@ from index_multivariate import m_compute_g, interpolate_p, precomp_denominators,
 
 def zk_index_h(filename, dim):
     q = 65537
-    # send perm F_q
-    perm = perm_F_q(q)
-    print(1)
-    # verifier temporal commitment
-    r, index = temporal_commitment(perm, q)
-    print(2)
     # create the stream
     a = gen_zk_index(filename)
-    print(3)
     #verifer creates its sketch
     F_q, mu, r, mapped_r, sketch, n, h, a_j = h_verifier(filename, q, dim, r)
-    print(4)
     # prover calculates the g vals
     g = m_compute_g(a, a_j, mu, mapped_r, n, h, F_q, dim)
-    print(5)
     # algebraic commitment
     p = secrets.randbelow(1000)
     g_0, commit, deg_g = algebraic_commitment(g, F_q, p)
-    print(6)
     y, gamma, k = commit
     folded_gamma, fp, beta = fingerprint(r, y, gamma, k, deg_g, F_q)
-    print(7)
-    # temporal decommitment
-    if temporal_decommitment(perm, r, index) == False:
-        return False
-    print(8)
     # algebraic decommitment
     unlocked_evals = algebraic_decommitment(y,k) 
-    print(9)
     #verifier interpolates the values provided by the prover, checks it agrees with prover and returns a_j if so
     return check_g_zk(folded_gamma, unlocked_evals, beta, g_0, fp, mu, sketch, gamma, F_q)
 
 def zk_index_d_prover(filename, dim):
     q = 65537
-    # send perm F_q
-    perm = perm_F_q(q)
-    print(1)
-    # verifier temporal commitment
-    r, index = temporal_commitment(perm, q)
-    print(2)
     # create the stream
     a = gen_zk_index(filename)
-    print(3)
     #verifer creates its sketch
     F_q, mu, r, mapped_r, sketch, n, h, a_j = h_verifier(filename, q, dim, r)
-    print(4)
     # prover calculates the g vals
     g = m_compute_g(a, a_j, mu, mapped_r, n, h, F_q, dim)
-    print(5)
     # algebraic commitment
     p = secrets.randbelow(1000)
     g_0, commit, deg_g = algebraic_commitment(g, F_q, p)
-    print(6)
     y, gamma, k = commit
     folded_gamma, fp, beta = fingerprint(r, y, gamma, k, deg_g, F_q)
-    print(7)
-    # temporal decommitment
-    if temporal_decommitment(perm, r, index) == False:
-        print("Temporal Commitment failed.")
-        return False
-    print(8)
     unlocked_evals = algebraic_decommitment(y,k) 
     #verifier interpolates the values provided by the prover, checks it agrees with prover and returns a_j if so
-    return check_g_zk(folded_gamma, unlocked_evals, beta, g_0, fp, mu, sketch, gamma, F_q)
-
-def zk_index_d_verifier(filename, dim):
-    q = 65537
-    # send perm F_q
-    perm = perm_F_q(q)
-    # create the stream
-    a = gen_zk_index(filename)
-    #verifer creates its sketch
-    F_q, mu, r, mapped_r, sketch, n, h, a_j, index = d_verifier(filename, q, dim)
-    # prover calculates the g vals
-    g = m_compute_g(a, a_j, mu, mapped_r, n, h, F_q, dim)
-    # algebraic commitment
-    p = secrets.randbelow(1000)
-    g_0, commit, deg_g = algebraic_commitment(g, F_q, p)
-    y, gamma, k = commit
-    folded_gamma, fp, beta = fingerprint(r, y, gamma, k, deg_g, F_q)
-    # temporal decommitment : should stop here
-    if temporal_decommitment(perm, r, index) == False:
-        print("Temporal Commitment failed.")
-        return False
-    unlocked_evals = algebraic_decommitment(y,k) 
     return check_g_zk(folded_gamma, unlocked_evals, beta, g_0, fp, mu, sketch, gamma, F_q)
 
 def perm_F_q(q):
     perm = np.random.permutation(np.arange(q))
     return perm
-
-def temporal_commitment(perm, q):
-    r = secrets.randbelow(q)
-    for i, val in enumerate(perm):
-        if val == r:
-            return r, i
         
 # honest verifier
 def h_verifier(filename, q, dim, r):
@@ -163,34 +103,6 @@ def h_verifier(filename, q, dim, r):
         return False
     # check with prover
     return (F_q, mu, r, mapped_r, sketch, n, h, a_j)
-
-# dishonest verifier
-def d_verifier(filename, q, dim):
-    # input is the length of stream a, the stream a and the index j
-    stream = stream_generator(filename)
-    # larger k = more accuracy
-    k = 45
-    # n: length of the input without annotation
-    n = next(stream)
-    h = math.ceil(math.pow(n, 1/dim))
-    shape = [h] * dim
-    # F_q: field for the low degree extension
-    F_q = g.GF(q)
-    # mu: non-zero element of F_q
-    mu = F_q(secrets.randbelow(q-2)+1)
-    # ignores the input stream
-    for _ in range(n):
-        next(stream)
-    # index of 
-    j = next(stream)
-    a_j = np.unravel_index(j,shape)
-    # maliciously choses r to learn more than necessary
-    r = j + 1 
-    mapped_r = tuple(F_q((r + i) % q) for i in range(dim))
-    # must guess index
-    index = secrets.randbelow(q)
-    # check with prover
-    return (F_q, mu, r, mapped_r, F_q(0), n, h, a_j, index)
 
 # prover
 def m_compute_g(a, a_j, mu, r, n, h, F_q, dim):
@@ -238,13 +150,6 @@ def fingerprint(rho, y, gamma, k, deg_g, F_q):
     folded_y = np.dot(beta, y)
     fingerprint = interpolate_p(folded_y, sigma, F_q)
     return folded_gamma, fingerprint, beta
-    
-# prover
-def temporal_decommitment(perm, r, index):
-    if perm[index] == r:
-        return True
-    else:
-        return False
 
 # prover
 def algebraic_decommitment(y, k):
@@ -253,7 +158,7 @@ def algebraic_decommitment(y, k):
 
 # verifier 
 def check_g_zk(folded_gamma, g_evals, beta, x_j, fp, mu, sketch, gamma, F_q):
-    # TODO : check fingerprint
+    # TODO : check fingerprint  
     locked_vals = gamma + g_evals
     full_evals = F_q([x_j] + locked_vals.tolist())
     g_mu = interpolate_p(full_evals, mu, F_q)

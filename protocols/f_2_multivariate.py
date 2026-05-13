@@ -15,26 +15,12 @@ base_path = Path(__file__).resolve().parent.parent
 
 
 from protocols.equality import pick_prime, stream_generator
-from stream_generation.gen_freq_moments import f_1_s, f_2_s, f_2_h_2d_t, f_2_h_2d_f
+from stream_generation.gen_freq_moments import f_2_s, f_2_h_2d_t, f_2_h_2d_f
 
 # larger k = more accuracy
 k = 45
 
-# 1st frequency moment
-def f_1(filename):
-    # prover creates stream
-    f_1_s(filename)
-    # verifier counts items
-    f_1 = f_1_v(filename)
-    return f_1
 
-def f_1_v(filename):
-    f_1 = 0
-    filepath = base_path / "streams" / filename
-    with open(filepath, 'r') as stream:
-        for item in stream:
-            f_1 += 1
-    return f_1
 
 # 2nd frequency moment with correct helper annotation (should correctly calculate F_2)
 def f_2_t(filename, helpername, k, dim):
