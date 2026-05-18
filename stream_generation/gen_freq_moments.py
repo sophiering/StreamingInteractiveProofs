@@ -32,7 +32,6 @@ def f_2_s(filename):
     s = np.random.randint(0, 1000000, size = n)
     with open(filepath, "w") as f:
         f.write(f"{n}\n")
-    with open(filepath, "ab") as f:
         np.savetxt(f, s, fmt = '%d')
     return n, s
 
@@ -41,6 +40,5 @@ def f_2_eval(filename, n):
     s = np.random.randint(0, 1000000, size = n)
     with open(filepath, "w") as f:
         f.write(f"{n}\n")
-    with open(filepath, "ab") as f:
         np.savetxt(f, s, fmt = '%d')
     return s

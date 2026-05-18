@@ -11,7 +11,6 @@ base_path = Path(__file__).resolve().parent.parent
 
 from stream_generation.gen_equality import true_eq, false_eq
 
-
 #input : an integer n, first string of length n, second string of length n
 #output : true or false
 
@@ -55,8 +54,8 @@ def prime_check(q, k):
     while (d % 2 == 0):
         s += 1
         d //= 2
-
-    for i in range(k):
+    # repeak miller-rabin for k rounds
+    for _ in range(k):
         if (miller_rabin(d,s,q) == False):
             return False
     return True
@@ -70,6 +69,7 @@ def pick_prime(qmin, k):
     #print("q found")
     return q
 
+# used to stream in the input
 def stream_generator(filename):
     filepath = base_path / "streams" / filename
     with open(filepath, 'r') as stream:
@@ -89,38 +89,33 @@ def equality_check(filename):
     qmin = max(pow(m, k), 3*k*h)
     q = pick_prime(qmin, k)
     # calculate lagragian interpolating polynomial at this point
-    checkpoint = secrets.randbelow(q) 
-
+    r = secrets.randbelow(q) 
     # fingerprint of stream 1
-    fp1 = 0
+    fp1 = 1
     # fingerprint of stream 2
-    fp2 = 0
-    x_term = 1
-    # time - we could just use this start time metric !
-    t = 0
+    fp2 = 1
     for i in range(n):
-        i1 = next(stream)
-        fp1 = (fp1 + i1 * x_term) % q
-        x_term = (x_term * checkpoint) % q
-        # are we using this?
-        t += 1
-    x_term = 1
+        a_i = next(stream)
+        fp1 = (fp1 * (r - a_i)) % q
     for i in range(n):
         try:
-            i2 = next(stream)
-            fp2 = (fp2 + i2 * x_term) % q
-            x_term = (x_term * checkpoint) % q
+            b_i = next(stream)
+            fp2 = (fp2 * (r - b_i)) % q
             # are we using this?
-            t += 1
-        except ValueError:
+        except StopIteration:
             print("length of inputs aren't equal")
             return False
     # WE MUST MAKE SURE LENGTH > n IS ALSO REJECTED
-
-    if fp1 == fp2:
-        return True
-    else:
+    try:
+        b_i = next(stream)
+        print("length of inputs aren't equal")
         return False
+    except StopIteration:
+        if fp1 == fp2:
+            return True
+        else:
+            print("fingerprints aren't equal")
+            return False
     
 def eq_fixed_q(filename): 
     stream = stream_generator(filename)
@@ -129,35 +124,27 @@ def eq_fixed_q(filename):
     # fixed q chosen
     q = 2305843009213693951
     # calculate lagragian interpolating polynomial at this point
-    checkpoint = secrets.randbelow(q) 
-
+    r = secrets.randbelow(q) 
     # fingerprint of stream 1
-    fp1 = 0
+    fp1 = 1
     # fingerprint of stream 2
-    fp2 = 0
-    x_term = 1
-    # time - we could just use this start time metric !
-    t = 0
+    fp2 = 1
     for i in range(n):
-        i1 = next(stream)
-        fp1 = (fp1 + i1 * x_term) % q
-        x_term = (x_term * checkpoint) % q
+        a_i = next(stream)
+        fp1 = (fp1 * (r - a_i)) % q
         # are we using this?
-        t += 1
-    x_term = 1
     for i in range(n):
         try:
-            i2 = next(stream)
-            fp2 = (fp2 + i2 * x_term) % q
-            x_term = (x_term * checkpoint) % q
-            # are we using this?
-            t += 1
-        except ValueError:
+            b_i = next(stream)
+            fp2 = (fp2 * (r - b_i)) % q
+        except StopIteration:
             print("length of inputs aren't equal")
             return False
-    # WE MUST MAKE SURE LENGTH > n IS ALSO REJECTED
-
-    if fp1 == fp2:
-        return True
-    else:
+    try:
+        b_i = next(stream)
         return False
+    except StopIteration:
+        if fp1 == fp2:
+            return True
+        else:
+            return False

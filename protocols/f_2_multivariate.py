@@ -13,41 +13,50 @@ root_path = Path(__file__).resolve().parent.parent
 sys.path.append(str(root_path))
 base_path = Path(__file__).resolve().parent.parent
 
+from stream_generation.gen_freq_moments import f_2_s
+from protocols.equality import stream_generator
 
-from protocols.equality import pick_prime, stream_generator
-from stream_generation.gen_freq_moments import f_2_s, f_2_h_2d_t, f_2_h_2d_f
+def m_f_2_h(filename, dim):
+    q = 2147483647
+    # f_2_s(filename)
+    F_q, r_challenges, h, f_eval = m_create_sketch(filename, dim)
+    #proof_polynomials, _ = m_h_prover(filename, dim, q, r_challenges)
+    prover = HonestProver(filename, dim, F_q)
+    expected_sum = None
+    claimed_f_2 = None
+    # k rounds of sum check
+    for k in range(dim):
+        P_k = prover.gen_polynomial()
+        result = verify_round(P_k, F_q, r_challenges[k], h, expected_sum)
+        if result == False:
+            return False
+        expected_sum, actual_sum = result
+        if k == 0:
+            claimed_f_2 = actual_sum
+        prover.reply(r_challenges[k])
+    return final_check(expected_sum, f_eval, claimed_f_2)
 
-# larger k = more accuracy
-k = 45
+def m_f_2_d(filename, dim):
+    q = 2147483647
+    # f_2_s(filename)
+    F_q, r_challenges, h, f_eval = m_create_sketch(filename, dim)
+    #proof_polynomials, _ = m_h_prover(filename, dim, q, r_challenges)
+    prover = DishonestProver(filename, dim, F_q)
+    expected_sum = None
+    claimed_f_2 = None
+    # k rounds of sum check
+    for k in range(dim):
+        P_k = prover.gen_polynomial(F_q)
+        result = verify_round(P_k, F_q, r_challenges[k], h, expected_sum)
+        if result == False:
+            return False
+        expected_sum, actual_sum = result
+        if k == 0:
+            claimed_f_2 = actual_sum
+        prover.reply(r_challenges[k])
+    return final_check(expected_sum, f_eval, claimed_f_2)
 
-
-
-# 2nd frequency moment with correct helper annotation (should correctly calculate F_2)
-def f_2_t(filename, helpername, k, dim):
-    # create frequency stream
-    n, s = f_2_s(filename)
-    # generate sketch
-    q, r, h, v_sketch = create_sketch(filename, k, dim)
-    # create helper annotation
-    f_2_h_2d_t(helpername, n, s, q, dim)
-    # verify
-    f_2 = verify(v_sketch, helpername, g.GF(q), r, h, dim)
-    return f_2
-
-
-# 2nd frequency moment with bad helper annotation (should fail)
-def f_2_f(filename, helpername, k):
-    # create frequency stream
-    n, s = f_2_s(filename)
-    # generate sketch
-    q, r, h, v_sketch = create_sketch(filename, k)
-    # create bad helper annotation
-    f_2_h_2d_f(helpername, n, s, q) 
-    # verify should return -1
-    f_2 = verify(v_sketch, helpername, g.GF(q), q, r, h)
-    return f_2
-
-def create_sketch(filename, k, dim):
+def m_create_sketch(filename, dim):
     filepath = base_path / "streams" / filename
     # input is the elements followed by the helper's annotation: a_1, ... a_n, s'(x)
     stream = stream_generator(filepath)
@@ -56,75 +65,153 @@ def create_sketch(filename, k, dim):
     m = n + random.randint(1,100000)
     h = math.ceil(math.pow(n, 1/dim))
     shape = [h] * dim
-    qmin = max(math.pow(m,k), 3*k*h)
-    q = pick_prime(qmin, k)
-    q_chosen = False
-    while q_chosen == False:
-        # field for the low degree extension
-        try:
-            F_q = g.GF(q)
-            q_chosen = True
-        except ValueError:
-            q = pick_prime(qmin, k)
-    r = [F_q(secrets.randbelow(q))] * dim
+    q = 2147483647
+    F_q = g.GF(q)
+    r = F_q([secrets.randbelow(q) for _ in range(dim)])
     # precompute 
-    precomp = np.ones((dim,h))
-    for dimension in dim:
+    precomp = F_q.Ones((dim,h))
+    for dimension in range(dim):
         for a in range(h):
+            num = F_q(1)
+            denom = F_q(1)
             for i in range(h):
                 if i != a:
-                    precomp[dimension][a] *= (r[dimension] - F_q(i)) / (F_q(a) - F_q(i))      
+                    num *= r[dimension] - F_q(i)
+                    denom *= F_q(a) - F_q(i)
+            precomp[dimension][a] *= num / denom     
     # create the h x v matrix
-    sketch = F_q.Zeros(h)    
+    f_eval = F_q(0)
     for item in range(n):
         # map to 3D coordinates (s_a, s_b, s_c)
         value = next(stream)
         current_value = F_q(value)
         k_dim_v = np.unravel_index(item, shape)
-        total = 1
+        total = F_q(1)
         for dimension in range(dim):
-            total *= precomp[dimension][k_dim_v[dimension]]
-        sketch[k_dim_v[-1]] += current_value * total
-    return q, r, h, sketch
+            total *= precomp[dimension,k_dim_v[dimension]]
+        f_eval += current_value * total
+    return F_q, r, h, f_eval
 
-# sumcheck
-def verify(sketch, h_annotation, F_q, r, h, dim):
-    filepath = base_path / "streams" / h_annotation
-    # input is the elements followed by the helper's annotation: a_1, ... a_n, s'(x)
-    stream = stream_generator(filepath)
-    # length of the input without annotation
-    d = (2 * h) - 1
-    # calculate sketch s(r)
-    total1 = F_q(0)
-    for s_val in sketch:
-        total1 += s_val ** 2
-    # precompute to aid s'(r) computation
-    common_numerator = F_q(1)
-    for i in range(d):
-        common_numerator *= (r - F_q(i))
-    denominators = F_q.Ones(d) 
-    for X in range(d):
-        for i in range(d):
-            if i != X:
-                denominators[X] *= (F_q(X) - F_q(i))
-    total2 = F_q(0)      
-    f_2 = F_q(0) 
-    # form s'(r)
-    with open(filepath, "r") as stream:
-        for X in range(d):
-            s_val = F_q(int(next(stream)))
-            # increment f_2 in case helper annotation is deemed trustworthy 
-            if X < h:
-                f_2 += s_val
-            if r == F_q(X):
-                total2 = s_val
+# precompute lagrange at eval points
+def precompute_lagrange(F_q, eval_points, h):
+    m = F_q.Zeros((len(eval_points), h), dtype=np.int64)
+    for i, x_val in enumerate(eval_points):
+        for a in range(h):
+            if x_val == F_q(a):
+                m[i, a] = F_q(1)
             else:
-                l_x_r = common_numerator / ((r - F_q(X)) * denominators[X])
-                total2 += s_val * l_x_r
-    # complete check to see if helper annotation can be trusted: s'(r) = s(r)
-    if total1 == total2:
-        print("True")
-        return int(f_2)
-    else:
-        print("False")
-        return -1
+                num = F_q(1)
+                denom = F_q(1)
+                for j in range(h):
+                    if j != a:
+                        num *= (x_val - F_q(j))
+                        denom *= (F_q(a) - F_q(j))
+                m[i, a] = num / denom
+    return m
+
+# honest prover class
+class HonestProver:
+    def __init__(self, filename, dim, F_q):
+        self.F_q = F_q
+        self.dim = dim
+        self.k = 0
+        stream = stream_generator(filename)
+        n = next(stream)
+        self.h = math.ceil(math.pow(n, 1/dim))
+        # degree of each polynomial
+        s_padded = np.zeros(self.h**dim, dtype=np.int64)
+        self.degree = 2 * (self.h - 1)
+        for i in range(n):
+            s_padded[i] = next(stream)
+        # shape into a k-dimensional hypercube
+        self.grid = self.F_q(s_padded).reshape((self.h,) * dim)
+        # the d + 1 points needed to define polynomial 
+        self.eval_points = [F_q(i) for i in range(self.degree + 1)]
+        self.precompute_eval = precompute_lagrange(F_q, self.eval_points, self.h)
+    
+    def gen_polynomial(self):
+        grid_2d = self.grid.reshape((self.h, -1))
+        f_tilde = np.matmul(self.precompute_eval, grid_2d)
+        s_prime = np.sum(f_tilde ** 2, axis=1)
+        return s_prime
+    
+    def reply(self, r_k):
+        grid_2d = self.grid.reshape((self.h, -1))
+        precompute_fold = precompute_lagrange(self.F_q, [r_k], self.h)
+        grid_flat = np.matmul(precompute_fold, grid_2d)[0]
+        if self.k < (self.dim - 1):
+            self.grid = grid_flat.reshape((self.h,) * (self.dim - self.k - 1))
+        else:
+            self.grid = grid_flat
+        self.k += 1
+
+# dishonest prover class
+class DishonestProver:
+    def __init__(self, filename, dim, F_q):
+        self.F_q = F_q
+        self.dim = dim
+        self.k = 0
+        stream = stream_generator(filename)
+        n = next(stream)
+        self.h = math.ceil(math.pow(n, 1/dim))
+        # degree of each polynomial
+        s_padded = np.zeros(self.h**dim, dtype=np.int64)
+        self.degree = 2 * (self.h - 1)
+        for i in range(n):
+            s_padded[i] = next(stream)
+        # shape into a k-dimensional hypercube
+        self.grid = self.F_q(s_padded).reshape((self.h,) * dim)
+        # the d + 1 points needed to define polynomial 
+        self.eval_points = [F_q(i) for i in range(self.degree + 1)]
+        self.precompute_eval = precompute_lagrange(F_q, self.eval_points, self.h)
+    
+    def gen_polynomial(self, F_q):
+        grid_2d = self.grid.reshape((self.h, -1))
+        f_tilde = np.matmul(self.precompute_eval, grid_2d)
+        s_prime = np.sum(f_tilde ** 2, axis=1)
+        # maliciously alter s prime
+        s_prime += F_q(1)
+        return s_prime
+    
+    def reply(self, r_k):
+        grid_2d = self.grid.reshape((self.h, -1))
+        precompute_fold = precompute_lagrange(self.F_q, [r_k], self.h)
+        grid_flat = np.matmul(precompute_fold, grid_2d)[0]
+        if self.k < (self.dim - 1):
+            self.grid = grid_flat.reshape((self.h,) * (self.dim - self.k - 1))
+        else:
+            self.grid = grid_flat
+        self.k += 1
+
+def interpolate_at_point(polynomial_evals, point, F_q):
+    d = len(polynomial_evals) - 1
+    total = F_q(0)
+    for X in range(d + 1):
+        num = F_q(1)
+        den = F_q(1)
+        for i in range(d + 1):
+            if i != X:
+                num *= (point - F_q(i))
+                den *= (F_q(X) - F_q(i))
+        total += polynomial_evals[X] * (num / den)
+    return total
+
+def verify_round(proof_polynomial, F_q, r_k, h, expected_sum):
+    # calculate prover's claimed f_2 by summing the first polynomial over the k dimensions
+    P_k = F_q(proof_polynomial)
+    actual_sum = F_q(0)
+    for x in range(h):
+        actual_sum += P_k[x]
+    if (expected_sum is not None) and (actual_sum != expected_sum):
+        print("sum-check fail")
+        return False
+    expected_sum = interpolate_at_point(P_k, r_k, F_q)
+    return expected_sum, actual_sum
+
+
+    # final check 
+def final_check(expected_sum, f_eval_from_sketch, claimed_f_2):
+    if expected_sum != (f_eval_from_sketch ** 2):
+        print("malicious prover deteched :(")
+        return False
+    return int(claimed_f_2)

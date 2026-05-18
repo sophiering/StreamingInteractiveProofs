@@ -20,23 +20,23 @@ from stream_generation.gen_index import gen_index
 # works!
 def index_t(filename, dim):
     # create the stream
-    a = gen_index(filename)
+    # a = gen_index(filename)
     #verifer creates its sketch
     F_q, mu, r, sketch, n, h, a_j = m_verifier(filename, dim)
+    prover = HonestProver(a, a_j, n, h, F_q, dim)
     # prover calculates the g vals
-    g = m_compute_g(a, a_j, mu, r, n, h, F_q, dim)
+    g = prover.compute_g(mu, r)
     #verifier interpolates the values provided by the prover, checks it agrees with prover and returns a_j if so
     return m_check_g(sketch, g, mu, F_q)
 
 def index_f(filename, dim):
     # create the stream
-    a = gen_index(filename)
+    # a = gen_index(filename)
     #verifer creates its sketch
     F_q, mu, r, sketch, n, h, a_j = m_verifier(filename, dim)
     # prover calculates the INCORRECT g vals
-    g = m_compute_g(a, a_j, mu, r, n, h, F_q, dim)
-    g = np.random.permutation(g)
-    g[0] += 1
+    prover = DishonestProver(a, a_j, n, h, F_q, dim)
+    g = prover.compute_g(mu, r)
     #verifier interpolates the values provided by the prover, checks it agrees with prover and returns a_j if so
     return m_check_g(sketch, g, mu, F_q)
 
@@ -81,7 +81,8 @@ def m_verifier(filename, dim):
     j = next(stream)
     a_j = np.unravel_index(j,shape)
     if n < j:
-        return False
+        print("invalid index j")
+        return -1
     # check with prover
     return (F_q, mu, r, sketch, n, h, a_j)
 
@@ -120,31 +121,6 @@ def compute_basis(h, F_q, target, d_inv, grid):
     basis = numerator * d_inv / diffs
     return basis
 
-# prover
-def m_compute_g(a, a_j, mu, r, n, h, F_q, dim):
-    d_inv, grid = precomp_denominators(h, F_q)
-    degree = dim * (h - 1)
-    g_vals = []
-    F_a = F_q(a)
-    # do we need to make a F_q(a)? 
-    for t in range(degree + 1):
-        t_f = F_q(t)
-        l = line_vals(a_j, t_f, mu, r, F_q, dim)
-        bases = []
-        # precompute basis weights
-        for d in range(dim):
-            bases.append(compute_basis(h, F_q, l[d], d_inv, grid))
-        weight = bases[0]
-        # outer product for multivariate basis weights (lagrange polynomial value at t)
-        for b in bases[1:]:
-            weight = np.outer(weight,b)
-        # compute P(x,y)
-        t_val = F_q(0)
-        current_weight = weight.flatten()[:n]
-        t_val = F_a @ current_weight
-        g_vals.append(t_val)
-    # return : coefficients polynomial g, where g(0) = x_j and g(mu) = r
-    return g_vals
 
 # check g 
 def interpolate_p(g, target, F_q):
@@ -174,12 +150,49 @@ def m_check_g(sketch, g, mu, F_q):
     if g_mu == sketch:
     # compute g(0)
         a_j_val = interpolate_p(g, 0, F_q)
-        print(a_j_val)
         return a_j_val
     # else throw error
     else:
-        print(False)
         return False
     
 
+class HonestProver:
+    def __init__(self, a, a_j, n, h, F_q, dim):
+        self.a = a
+        self.a_j = a_j
+        self.n = n
+        self.h = h
+        self.F_q = F_q
+        self.dim = dim
+        self.d_inv, self.grid = precomp_denominators(h, F_q)
+        self.degree = dim * (h - 1)
     
+    def compute_g(self, mu, r_k):
+        g_vals = []
+        F_a = self.F_q(self.a)
+        # do we need to make a F_q(a)? 
+        for t in range(self.degree + 1):
+            t_f = self.F_q(t)
+            l = line_vals(self.a_j, t_f, mu, r_k, self.F_q, self.dim)
+            bases = []
+            # precompute basis weights
+            for d in range(self.dim):
+                bases.append(compute_basis(self.h, self.F_q, l[d], self.d_inv, self.grid))
+            weight = bases[0]
+            # outer product for multivariate basis weights (lagrange polynomial value at t)
+            for b in bases[1:]:
+                weight = np.outer(weight,b)
+            # compute P(x,y)
+            t_val = self.F_q(0)
+            current_weight = weight.flatten()[:self.n]
+            t_val = F_a @ current_weight
+            g_vals.append(t_val)
+        # return : coefficients polynomial g, where g(0) = x_j and g(mu) = r
+        return g_vals
+
+class DishonestProver(HonestProver):
+    def compute_g(self, mu, r_k):
+        g_vals = super().compute_g(mu, r_k)
+        m_g_vals = np.random.permutation(g_vals).tolist()
+        m_g_vals[0] += 1
+        return m_g_vals

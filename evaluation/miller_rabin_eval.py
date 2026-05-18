@@ -1,5 +1,7 @@
 import math 
 import random
+import time
+import galois as g
 import numpy as np 
 import sys
 from pathlib import Path
@@ -7,7 +9,7 @@ from pathlib import Path
 root_path = Path(__file__).resolve().parent.parent
 sys.path.append(str(root_path))
 
-from protocols.equality import prime_check
+from protocols.equality import prime_check, pick_prime
 
 def eval_mr():
     q_primes = [2, 31, 7237, 7879, 29851, 29959, 42083, 396997, 405749, 108967]
@@ -23,11 +25,11 @@ def eval_mr():
         q_runtimes = []
         c_runtimes = []
         for q in q_primes:
-            verdict, runtime = prime_check(q, k)
+            verdict, runtime = mr(q, k)
             q_verdicts.append(verdict)
             q_runtimes.append(runtime)
         for c in q_composites:
-            verdict, runtime = prime_check(c, k)
+            verdict, runtime = mr(c, k)
             c_verdicts.append(verdict)
             c_runtimes.append(runtime)
         q_correctness = np.count_nonzero(q_verdicts) / len(q_verdicts) * 100
@@ -37,3 +39,45 @@ def eval_mr():
         prime_runtimes.append(np.mean(q_runtimes))
         composite_runtimes.append(np.mean(c_runtimes))
     return prime_correctness, prime_runtimes, composite_correctness, composite_runtimes
+
+def eval_large_primes(n_vals, k_vals):
+    prime_correctness = []
+    prime_runtimes = []
+    for k in k_vals:
+        q_verdicts = []
+        q_runtimes = []
+        for n in n_vals:
+            verdict, runtime = mr_n(n, k)
+            q_verdicts.append(verdict)
+            q_runtimes.append(runtime)
+        q_correctness = np.count_nonzero(q_verdicts) / len(q_verdicts) * 100
+        prime_correctness.append(q_correctness)
+        prime_runtimes.append(np.mean(q_runtimes))
+    return prime_correctness, prime_runtimes
+
+def mr(q,k):
+    start_time = time.perf_counter()
+    verdict = prime_check(q, k)
+    end_time = time.perf_counter()
+    runtime = end_time - start_time
+    return verdict, runtime
+
+def mr_n(n,k):
+    start_time = time.perf_counter()
+    h = math.ceil(math.sqrt(n))
+    m = n + 1000
+    qmin = max(math.pow(m,k), 3*k*h)
+    q = pick_prime(qmin, k)
+    q_chosen = False
+    while q_chosen == False:
+        # field for the low degree extension
+        try:
+            F_q = g.GF(q)
+            q_chosen = True
+        except ValueError:
+            q = pick_prime(qmin, k)
+    end_time = time.perf_counter()
+    runtime = end_time - start_time
+    print(runtime)
+    return True, runtime
+

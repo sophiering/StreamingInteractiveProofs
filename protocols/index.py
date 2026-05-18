@@ -27,7 +27,7 @@ k = 45
 # works!
 def index_t(filename):
     # create the stream
-    a = gen_index(filename)
+    # a = gen_index(filename)
     #verifer creates its sketch
     F_q, mu, r, sketch, n, h, a_j = verifier(filename)
     # prover calculates the g vals
@@ -37,7 +37,7 @@ def index_t(filename):
 
 def index_f(filename):
     # create the stream
-    a = gen_index(filename)
+    # a = gen_index(filename)
     #verifer creates its sketch
     F_q, mu, r, sketch, n, h, a_j = verifier(filename)
     # prover calculates the g vals
@@ -48,7 +48,7 @@ def index_f(filename):
 
 def pep_t(filename):
     # create the stream
-    a = gen_pep(filename)
+    # a = gen_pep(filename)
     #verifer creates its sketch
     F_q, mu, r, sketch, n, h, a_j, alpha = verifier_pep(filename)
     # prover calculates the g vals
@@ -60,7 +60,7 @@ def pep_t(filename):
 
 def pep_f(filename):
     # create the stream
-    a = gen_pep(filename)
+    # a = gen_pep(filename)
     #verifer creates its sketch
     F_q, mu, r, sketch, n, h, a_j, alpha = verifier_pep(filename)
     # prover calculates the g vals
@@ -119,7 +119,8 @@ def verifier(filename):
     j = next(stream)
     a_j = (F_q(j //h), F_q(j % h))
     if n < j:
-        return False
+        print("invalid index j")
+        return -1
     # check with prover
     return (F_q, mu, r, sketch, n, h, a_j)
 

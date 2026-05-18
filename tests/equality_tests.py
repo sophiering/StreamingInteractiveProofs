@@ -8,6 +8,7 @@ sys.path.append(str(root_path))
 
 from stream_generation.gen_equality import gen_test
 from protocols.equality import equality_check, equality_t, equality_f
+from protocols.exact_equality import equality_check, equality_f, equality_t
 
 class TestClass(unittest.TestCase):
     # ensure 

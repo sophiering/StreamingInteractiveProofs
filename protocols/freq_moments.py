@@ -39,7 +39,7 @@ def f_0_v(filename):
 # 1st frequency moment
 def f_1(filename):
     # prover creates stream
-    f_s(filename)
+    # f_s(filename)
     # verifier counts items
     f_1 = f_1_v(filename)
     return f_1
@@ -55,37 +55,27 @@ def f_1_v(filename):
 
 # 2nd frequency moment with correct helper annotation (should correctly calculate F_2)
 def f_2_t(filename, helpername):
-    print(time.perf_counter())
     # create frequency stream
-    n, s = f_2_s(filename)
-    print(time.perf_counter())
+    # n, s = f_2_s(filename)
     # generate sketch
     q, r, h, v_sketch = sketch_2d(filename, k)
-    print(time.perf_counter())
     # create helper annotation
     h_2d_t(helpername, n, s, q)
-    print(time.perf_counter())
     # verify
     f_2 = verify(v_sketch, helpername, g.GF(q), r, h)
-    print(time.perf_counter())
     return f_2
 
 
 # 2nd frequency moment with bad helper annotation (should fail)
 def f_2_f(filename, helpername):
-    print(time.perf_counter())
     # create frequency stream
-    n, s = f_2_s(filename)
-    print(time.perf_counter())
+    # n, s = f_2_s(filename)
     # generate sketch
     q, r, h, v_sketch = sketch_2d(filename, k)
-    print(time.perf_counter())
     # create bad helper annotation
     h_2d_f(helpername, n, s, q) 
-    print(time.perf_counter())
     # verify should return -1
     f_2 = verify(v_sketch, helpername, g.GF(q), r, h)
-    print(time.perf_counter())
     return f_2
 
 def sketch_2d(filename, k):
@@ -95,17 +85,6 @@ def sketch_2d(filename, k):
     # length of the input without annotation
     n = next(stream) 
     h = math.ceil(math.sqrt(n))
-    '''m = n + random.randint(1,100000)
-    qmin = max(math.pow(m,k), 3*k*h)
-    q = pick_prime(qmin, k)
-    q_chosen = False
-    while q_chosen == False:
-        # field for the low degree extension
-        try:
-            F_q = g.GF(q)
-            q_chosen = True
-        except ValueError:
-            q = pick_prime(qmin, k) '''
     q = 2147483647
     F_q = g.GF(q)
     r = F_q(secrets.randbelow(q))
@@ -208,16 +187,14 @@ def h_2d_f(helpername, n, s, q):
             f.write(f"{int(element)}\n")
     return s_prime
 
-def multivariate_h():
-    pass
-
 # sumcheck
 def verify(sketch, h_annotation, F_q, r, h):
     filepath = base_path / "streams" / h_annotation
     # input is the elements followed by the helper's annotation: a_1, ... a_n, s'(x)
     stream = stream_generator(filepath)
     # length of the input without annotation
-    d = (2 * h) - 1
+    d = (2 * int(h)) - 1
+    r = F_q(r)
     # calculate sketch s(r)
     total1 = F_q(0)
     for s_val in sketch:
@@ -250,5 +227,3 @@ def verify(sketch, h_annotation, F_q, r, h):
         return int(f_2)
     else:
         return False
-
-
